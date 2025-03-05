@@ -120,11 +120,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
-            // Set transition for smooth animation
-            element.style.transition = `bottom ${midiFile.duration}s linear`;
-            // Animate to final position - move notes to a negative bottom value to go beyond keyboard
+            // Set transition for faster animation - adjusted to match actual play time
+            const animationDuration = note.time;
+            element.style.transition = `bottom ${animationDuration}s linear`;
+            // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
-                element.style.bottom = `-${note.duration * heightScale * 2}px`;
+                // Position to negative value to continue past the bottom
+                element.style.bottom = `-${note.duration * heightScale}px`;
             }, 10);
         });
         
