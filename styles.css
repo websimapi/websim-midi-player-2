@@ -140,14 +140,14 @@ button:disabled {
     position: absolute;
     border-radius: 2px;
     transition: background-color 0.2s;
-    transform: translateY(0); /* Initial position */
+    bottom: 0;
 }
 
 .note.active {
     background-color: #1ed760 !important;
 }
 
-@keyframes scrollDown {
-    from { transform: translateY(-100vh); }
-    to { transform: translateY(0); }
+@keyframes scrollUp {
+    from { transform: translateY(0); }
+    to { transform: translateY(100%); }
 }

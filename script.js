@@ -70,8 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.className = 'note';
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
-                // Position notes at the top, with their bottom edge at the time position
-                noteElement.style.top = `-${(note.time / midiFile.duration) * 100}%`;
+                // Position notes initially above the viewport so they can scroll down
+                noteElement.style.bottom = `${(note.time / midiFile.duration) * 100 + 100}%`;
                 noteElement.style.height = `${(note.duration / midiFile.duration) * 100}%`;
                 noteElement.style.backgroundColor = trackColor;
                 
@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Set up note scrolling animation
         document.querySelectorAll('.note').forEach(noteEl => {
-            noteEl.style.animation = `scrollDown ${midiFile.duration}s linear forwards`;
+            noteEl.style.animation = `scrollUp ${midiFile.duration}s linear forwards`;
         });
         
         // Schedule all notes
@@ -180,6 +180,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Remove animations when stopped
         document.querySelectorAll('.note').forEach(noteEl => {
             noteEl.style.animation = 'none';
+            // Reset the note position to its original position
+            const time = parseFloat(noteEl.dataset.time);
+            noteEl.style.bottom = `${(time / midiFile.duration) * 100 + 100}%`;
         });
         
         isPlaying = false;
