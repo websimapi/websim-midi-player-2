@@ -116,6 +116,7 @@ button:disabled {
     margin-right: 1px;
     border-radius: 0 0 3px 3px;
     position: relative;
+    z-index: 2;
 }
 
 .piano-key.black {
@@ -140,6 +141,7 @@ button:disabled {
     border-radius: 2px;
     transition: background-color 0.2s;
     opacity: 0.8;
+    z-index: 1;
 }
 
 .note.active {
@@ -147,6 +149,13 @@ button:disabled {
     opacity: 1;
     box-shadow: 0 0 10px rgba(30, 215, 96, 0.7);
     z-index: 3;
+}
+
+.note.played {
+    z-index: 0;
+    opacity: 0.5;
+    transition: opacity 0.3s, bottom 0.3s, z-index 0s;
+    bottom: -30px !important;
 }
 
 .piano-key.active {

@@ -158,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
                     if (noteEl) {
                         noteEl.classList.remove('active');
+                        noteEl.classList.add('played');
                         
                         // Find the corresponding piano key
                         const key = findPianoKey(note.midi);
@@ -189,12 +190,13 @@ document.addEventListener('DOMContentLoaded', () => {
             el.classList.remove('active');
         });
         
-        // Reset note positions
+        // Reset note positions and remove 'played' class
         notes.forEach(({element, note}) => {
             const time = parseFloat(element.dataset.time);
             const heightScale = 100;
             element.style.transition = 'none'; // Disable transition for immediate positioning
             element.style.bottom = `${notesContainer.clientHeight + (time * heightScale)}px`;
+            element.classList.remove('played');
         });
         
         isPlaying = false;
