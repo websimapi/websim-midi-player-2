@@ -128,7 +128,7 @@ button:disabled {
 
 #notes-container {
     position: absolute;
-    bottom: 60px;
+    top: 0;
     left: 0;
     width: 100%;
     height: calc(100% - 60px);
@@ -144,4 +144,3 @@ button:disabled {
 .note.active {
     background-color: #1ed760 !important;
 }
-

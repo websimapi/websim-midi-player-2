@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.className = 'note';
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
-                noteElement.style.bottom = `${(note.time / 2) * 100}px`;
+                noteElement.style.top = `${(note.time / 2) * 100}px`;
                 noteElement.style.height = `${(note.duration / 2) * 100}px`;
                 noteElement.style.backgroundColor = trackColor;
                 
@@ -209,4 +209,3 @@ document.addEventListener('DOMContentLoaded', () => {
         return colors[index % colors.length];
     }
 });
-
