@@ -138,7 +138,6 @@ button:disabled {
 .note {
     position: absolute;
     border-radius: 2px;
-    transition: background-color 0.2s;
     opacity: 0.8;
     will-change: transform, bottom;
 }
@@ -150,15 +149,8 @@ button:disabled {
     z-index: 3;
 }
 
-.note.falling {
-    z-index: 1;
-    transition-property: bottom;
-    will-change: bottom;
-}
-
 .note.finished {
     opacity: 0.3;
-    transform: translateY(100%);
     pointer-events: none;
 }
 
