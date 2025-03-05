@@ -120,12 +120,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
+            // Add the falling class to all notes
+            element.classList.add('falling');
             // Set transition for faster animation - adjusted to match actual play time
             const animationDuration = note.time;
             element.style.transition = `bottom ${animationDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
-                element.style.bottom = '0px';
+                element.style.bottom = '-1000px'; // Continue falling beyond the keyboard
             }, 10);
         });
         
@@ -150,9 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (key) {
                             key.classList.add('active');
                         }
-                        
-                        // Create shatter effect
-                        createShatterEffect(noteEl);
                     }
                 }, now + note.time);
                 
@@ -161,6 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
                     if (noteEl) {
                         noteEl.classList.remove('active');
+                        noteEl.classList.add('finished'); // Add finished class to hide the note
                         
                         // Find the corresponding piano key
                         const key = findPianoKey(note.midi);
@@ -192,12 +192,14 @@ document.addEventListener('DOMContentLoaded', () => {
             el.classList.remove('active');
         });
         
-        // Reset note positions
+        // Reset note positions and remove finished class
         notes.forEach(({element, note}) => {
             const time = parseFloat(element.dataset.time);
             const heightScale = 100;
             element.style.transition = 'none'; // Disable transition for immediate positioning
             element.style.bottom = `${notesContainer.clientHeight + (time * heightScale)}px`;
+            element.classList.remove('falling');
+            element.classList.remove('finished');
         });
         
         isPlaying = false;
@@ -236,53 +238,5 @@ document.addEventListener('DOMContentLoaded', () => {
             '#FFFF00', '#FFD740', '#FFAB40', '#FF6E40'
         ];
         return colors[index % colors.length];
-    }
-    
-    function createShatterEffect(noteEl) {
-        // Get the note's color and dimensions
-        const noteColor = window.getComputedStyle(noteEl).backgroundColor;
-        const noteRect = noteEl.getBoundingClientRect();
-        const noteWidth = noteEl.offsetWidth;
-        
-        // Create particles for shatter effect
-        const particleCount = 8;
-        const particleSize = noteWidth / 4;
-        
-        // Create the particles at the bottom of the note
-        for (let i = 0; i < particleCount; i++) {
-            const particle = document.createElement('div');
-            particle.className = 'note-particle';
-            particle.style.backgroundColor = noteColor;
-            particle.style.width = `${particleSize}px`;
-            particle.style.height = `${particleSize}px`;
-            
-            // Position particle at the bottom of the note
-            particle.style.left = `${(i / particleCount) * noteWidth}px`;
-            particle.style.bottom = '0px';
-            
-            noteEl.appendChild(particle);
-            
-            // Remove particles after animation finishes
-            setTimeout(() => {
-                if (particle.parentNode) {
-                    particle.parentNode.removeChild(particle);
-                }
-            }, 500);
-        }
-        
-        // Gradually "eat" the note by reducing its height
-        const originalHeight = parseFloat(noteEl.style.height);
-        const consumptionRate = originalHeight / (parseFloat(noteEl.dataset.duration) * 1000); // pixels per millisecond
-        
-        let consumed = 0;
-        const consumeInterval = setInterval(() => {
-            consumed += consumptionRate * 16; // 16ms is approx frame time at 60fps
-            if (consumed >= originalHeight) {
-                clearInterval(consumeInterval);
-                noteEl.style.height = '0px';
-            } else {
-                noteEl.style.height = `${originalHeight - consumed}px`;
-            }
-        }, 16);
     }
 });
