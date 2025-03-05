@@ -71,8 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
                 
-                // Position notes above viewport initially, they'll fall down during playback
-                const heightScale = 100; // Scale factor for note height
+                // Position notes above viewport initially with fixed distance calculation
+                const heightScale = 200; // Increased scale factor for faster falling
                 noteElement.style.bottom = `${notesContainer.clientHeight + (note.time * heightScale)}px`;
                 noteElement.style.height = `${note.duration * heightScale}px`;
                 noteElement.style.backgroundColor = trackColor;
@@ -116,13 +116,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Schedule all notes
         const now = Tone.now();
-        const heightScale = 100; // Same scale factor as in parseMidiFile
-        const totalDuration = midiFile.duration;
+        const heightScale = 200; // Same increased scale factor as in parseMidiFile
+        const fallDuration = midiFile.duration * 0.95; // Slightly faster animation than song duration for better sync
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
-            // Set transition for smooth animation with easing for better sync
-            element.style.transition = `bottom ${totalDuration}s linear`;
+            // Set transition for smooth animation with updated timing
+            element.style.transition = `bottom ${fallDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
                 element.style.bottom = '0px';
@@ -139,13 +139,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     note.velocity
                 );
                 
-                // Schedule visual feedback - snap the note to the key right before playing
+                // Schedule visual feedback
                 Tone.Transport.schedule((time) => {
                     const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
                     if (noteEl) {
-                        // Force the note to be at the bottom position when it's being played
-                        noteEl.style.transition = 'bottom 0.1s ease-in';
-                        noteEl.style.bottom = '0px';
                         noteEl.classList.add('active');
                         
                         // Find the corresponding piano key
@@ -154,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             key.classList.add('active');
                         }
                     }
-                }, now + note.time - 0.1); // Schedule slightly before to ensure visual sync
+                }, now + note.time);
                 
                 // Schedule note end
                 Tone.Transport.schedule((time) => {
@@ -195,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset note positions
         notes.forEach(({element}) => {
             const time = parseFloat(element.dataset.time);
-            const heightScale = 100;
+            const heightScale = 200; // Updated to match the new scale factor
             element.style.transition = 'none'; // Disable transition for immediate positioning
             element.style.bottom = `${notesContainer.clientHeight + (time * heightScale)}px`;
         });
