@@ -6,244 +6,285 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopButton = document.getElementById('stop-button');
     const pianoContainer = document.getElementById('piano-container');
     const notesContainer = document.getElementById('notes-container');
-    
+    const statusMessage = document.getElementById('status-message');
+    const aiToggle = document.getElementById('ai-toggle');
+
     // State variables
     let midiFile = null;
-    let isPlaying = false;
+    let player = null;
     let synth = null;
-    let noteElements = [];
-    let animationFrameId = null;
-    let startTime = 0;
-    let visualizerHeight = 0;
-    let pixelsPerSecond = 0;
-    
+    let isPlaying = false;
+    let aiSuggestions = [];
+    let originalMidiData = [];
+    let isCapturing = false;
+    let captureStartTime = 0;
+    let isAiMode = false;
+
     // Initialize the piano keyboard (88 keys)
     initPiano();
-    
+
     // Event listeners
     midiUpload.addEventListener('change', handleMidiUpload);
     playButton.addEventListener('click', playMidi);
     stopButton.addEventListener('click', stopMidi);
-    
+    aiToggle.addEventListener('change', (e) => {
+        isAiMode = e.target.checked;
+    });
+
     // Initialize Tone.js synth
     synth = new Tone.PolySynth(Tone.Synth).toDestination();
-    
+
     function handleMidiUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
-        
+
         fileNameDisplay.textContent = file.name;
-        
+
         const reader = new FileReader();
-        
+
         reader.onload = function(e) {
             const midiData = e.target.result;
             parseMidiFile(midiData);
         };
-        
+
         reader.readAsArrayBuffer(file);
     }
-    
+
     function parseMidiFile(midiData) {
         midiFile = new Midi(midiData);
         console.log('MIDI file loaded:', midiFile);
-        
+
         // Clear previous notes
-        notesContainer.innerHTML = '';
-        noteElements = [];
-        
-        // Get visualizer dimensions
-        visualizerHeight = notesContainer.clientHeight;
-        
-        // Calculate pixels per second based on song duration
-        // Use a constant speed for all songs
-        pixelsPerSecond = 200; // Adjust this value to control speed
-        
-        // Process each track
+        originalMidiData = [];
+        aiSuggestions = [];
+
+        // Process each track to extract note data
         midiFile.tracks.forEach((track, trackIndex) => {
-            const trackColor = getTrackColor(trackIndex);
-            
             // Process notes in the track
             track.notes.forEach(note => {
-                // Calculate position and dimensions for visualization
-                const key = findPianoKey(note.midi);
-                if (!key) return;
-                
-                const keyRect = key.getBoundingClientRect();
-                const keyWidth = keyRect.width;
-                const keyLeft = key.offsetLeft;
-                
-                const noteElement = document.createElement('div');
-                noteElement.className = 'note';
-                noteElement.style.left = `${keyLeft}px`;
-                noteElement.style.width = `${keyWidth}px`;
-                
-                // Calculate note height based on duration
-                const noteHeight = note.duration * pixelsPerSecond;
-                noteElement.style.height = `${noteHeight}px`;
-                noteElement.style.backgroundColor = trackColor;
-                
-                // Position notes 200px lower than before
-                noteElement.style.bottom = `${visualizerHeight + 200}px`;
-                
-                noteElement.dataset.note = note.midi;
-                noteElement.dataset.time = note.time;
-                noteElement.dataset.duration = note.duration;
-                
-                notesContainer.appendChild(noteElement);
-                noteElements.push({
-                    element: noteElement,
-                    note: note,
-                    keyElement: key
+                originalMidiData.push({
+                    midi: note.midi,
+                    name: note.name,
+                    time: note.time,
+                    duration: note.duration,
+                    velocity: note.velocity
                 });
             });
         });
-        
+
+        // Sort notes by time
+        originalMidiData.sort((a, b) => a.time - b.time);
+
         // Enable play button
         playButton.disabled = false;
+
+        // Disable the stop button until playing
         stopButton.disabled = true;
+
+        // Reset status message
+        statusMessage.textContent = '';
     }
-    
-    function playMidi() {
+
+    async function playMidi() {
         if (isPlaying || !midiFile) return;
-        
+
         // Reset Tone.js context if it's suspended
         if (Tone.context.state !== 'running') {
             Tone.context.resume();
         }
-        
+
         isPlaying = true;
         playButton.disabled = true;
         stopButton.disabled = false;
-        
+
+        // If in AI mode and we have suggestions, play with AI additions
+        const notesToPlay = isAiMode && aiSuggestions.length > 0 
+            ? [...originalMidiData, ...aiSuggestions] 
+            : originalMidiData;
+
+        // Sort combined notes by time
+        notesToPlay.sort((a, b) => a.time - b.time);
+
+        // If we're not in AI mode and we don't have AI suggestions yet, capture for LLM analysis
+        if (!isAiMode && aiSuggestions.length === 0) {
+            isCapturing = true;
+            captureStartTime = Tone.now();
+            statusMessage.textContent = 'Capturing first 15 seconds for AI analysis...';
+        }
+
+        // Schedule all notes
         const now = Tone.now();
-        startTime = performance.now();
-        
-        // Schedule all notes with Tone.js
-        midiFile.tracks.forEach(track => {
-            track.notes.forEach(note => {
-                // Schedule note audio
-                synth.triggerAttackRelease(
-                    note.name,
-                    note.duration,
-                    now + note.time,
-                    note.velocity
-                );
-            });
+
+        notesToPlay.forEach(note => {
+            // Schedule note
+            synth.triggerAttackRelease(
+                note.name,
+                note.duration,
+                now + note.time,
+                note.velocity
+            );
+
+            // Schedule visual feedback
+            Tone.Transport.schedule((time) => {
+                // Find the corresponding piano key
+                const key = findPianoKey(note.midi);
+                if (key) {
+                    if (note.isAiGenerated) {
+                        key.classList.add('ai-active');
+                    } else {
+                        key.classList.add('active');
+                    }
+                }
+            }, now + note.time);
+
+            // Schedule note end
+            Tone.Transport.schedule((time) => {
+                // Find the corresponding piano key
+                const key = findPianoKey(note.midi);
+                if (key) {
+                    key.classList.remove('active', 'ai-active');
+                }
+            }, now + note.time + note.duration);
         });
-        
-        // Start animation loop
-        animateNotes();
-        
+
+        // If capturing, schedule the LLM analysis
+        if (isCapturing) {
+            Tone.Transport.schedule(async () => {
+                // Get the first 15 seconds of notes
+                const fifteenSecondData = originalMidiData.filter(note => note.time < 15);
+                isCapturing = false;
+
+                // Show analyzing message
+                statusMessage.textContent = 'AI is analyzing your music...';
+
+                // Request AI suggestions
+                await generateAiSuggestions(fifteenSecondData);
+
+                // Update status once we have suggestions
+                statusMessage.textContent = 'AI suggestions ready! Toggle "AI Mode" to hear them.';
+            }, now + 15);
+        }
+
         // Schedule stop at the end
+        const totalDuration = Math.max(...notesToPlay.map(note => note.time + note.duration));
         Tone.Transport.schedule(() => {
             stopMidi();
-        }, now + midiFile.duration + 0.5);
-        
+        }, now + totalDuration + 0.5);
+
         Tone.Transport.start();
     }
-    
-    function animateNotes() {
-        if (!isPlaying) return;
-        
-        // Calculate elapsed time since playback started
-        const currentTime = (performance.now() - startTime) / 1000;
-        
-        // Update each note's position
-        noteElements.forEach(({element, note, keyElement}) => {
-            // Calculate the correct position based on current time
-            const noteStartTime = note.time;
-            const noteDuration = note.duration;
-            const noteEndTime = noteStartTime + noteDuration;
-            
-            // Position calculation: how far the note has moved since the start
-            const distanceToTravel = (currentTime - noteStartTime) * pixelsPerSecond;
-            
-            // Bottom position is calculated relative to the bottom of the container
-            // When distanceToTravel is 0, the note should be at the top of the visualizer
-            const bottomPosition = visualizerHeight - distanceToTravel;
-            
-            // Set the position
-            element.style.bottom = `${bottomPosition}px`;
-            
-            // Note activation/deactivation
-            if (currentTime >= noteStartTime && currentTime < noteEndTime) {
-                // Note is currently playing
-                element.classList.add('active');
-                keyElement.classList.add('active');
-            } else if (currentTime >= noteEndTime) {
-                // Note has finished playing
-                element.classList.remove('active');
-                keyElement.classList.remove('active');
-                element.classList.add('finished');
-            }
-        });
-        
-        // Continue animation loop
-        animationFrameId = requestAnimationFrame(animateNotes);
-    }
-    
+
     function stopMidi() {
         if (!isPlaying) return;
-        
-        // Cancel animation frame
-        if (animationFrameId) {
-            cancelAnimationFrame(animationFrameId);
-            animationFrameId = null;
-        }
-        
+
         synth.releaseAll();
         Tone.Transport.cancel();
         Tone.Transport.stop();
-        
+
         // Reset all active notes and keys
-        document.querySelectorAll('.note.active, .piano-key.active').forEach(el => {
-            el.classList.remove('active');
+        document.querySelectorAll('.piano-key.active, .piano-key.ai-active').forEach(el => {
+            el.classList.remove('active', 'ai-active');
         });
-        
-        // Reset note positions and remove finished class
-        noteElements.forEach(({element}) => {
-            element.style.bottom = `${visualizerHeight + 200}px`;
-            element.classList.remove('falling');
-            element.classList.remove('active');
-            element.classList.remove('finished');
-        });
-        
+
         isPlaying = false;
         playButton.disabled = false;
         stopButton.disabled = true;
+
+        // If we were capturing but stopped early, cancel the capture
+        if (isCapturing) {
+            isCapturing = false;
+            statusMessage.textContent = 'Capture canceled. Play again to restart capture.';
+        }
     }
-    
+
+    async function generateAiSuggestions(capturedNotes) {
+        try {
+            // Prepare music data for LLM analysis
+            const musicData = capturedNotes.map(note => ({
+                noteName: note.name,
+                midiNumber: note.midi,
+                startTime: note.time,
+                duration: note.duration,
+                velocity: note.velocity
+            }));
+
+            // LLM prompt to analyze music and suggest additions
+            const prompt = `
+As a musical AI, analyze these MIDI notes from the first 15 seconds of a piece:
+${JSON.stringify(musicData, null, 2)}
+
+Based on this melody and harmony pattern, suggest 5-10 additional notes that would complement the piece.
+Focus on creating interesting harmonies, counterpoint, or embellishments that enhance the musical idea.
+The suggestions should match the style and feel of the original piece.
+
+Respond directly with JSON in this format:
+{
+  "suggestedNotes": [
+    {
+      "noteName": "C4",
+      "midiNumber": 60,
+      "startTime": 2.5,
+      "duration": 0.25,
+      "velocity": 0.75
+    }
+    // more suggested notes
+  ],
+  "explanation": "Brief explanation of your musical choices"
+}`;
+
+            // Call the LLM for analysis
+            const completion = await websim.chat.completions.create({
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                json: true
+            });
+
+            // Parse the LLM response
+            const result = JSON.parse(completion.content);
+            console.log("AI suggestions:", result);
+
+            // Format the suggestions for our player
+            aiSuggestions = result.suggestedNotes.map(note => ({
+                midi: note.midiNumber,
+                name: note.noteName,
+                time: note.startTime,
+                duration: note.duration,
+                velocity: note.velocity,
+                isAiGenerated: true
+            }));
+
+            console.log("Processed AI suggestions:", aiSuggestions);
+
+        } catch (error) {
+            console.error("Error generating AI suggestions:", error);
+            statusMessage.textContent = 'Error generating AI suggestions.';
+            aiSuggestions = [];
+        }
+    }
+
     function initPiano() {
         // Create 88 piano keys (standard piano)
         const startNote = 21; // A0
         const endNote = 108; // C8
-        
+
         for (let midi = startNote; midi <= endNote; midi++) {
             const isBlack = [1, 3, 6, 8, 10].includes(midi % 12);
             const key = document.createElement('div');
             key.className = `piano-key ${isBlack ? 'black' : 'white'}`;
             key.dataset.midi = midi;
-            
+
             // Adjust width based on key type
             key.style.width = isBlack ? '8px' : '14px';
-            
+
             pianoContainer.appendChild(key);
         }
     }
-    
+
     function findPianoKey(midiNote) {
         return pianoContainer.querySelector(`.piano-key[data-midi="${midiNote}"]`);
-    }
-    
-    function getTrackColor(index) {
-        // Generate colors for different tracks
-        const colors = [
-            '#FF5252', '#FF4081', '#E040FB', '#7C4DFF', 
-            '#536DFE', '#448AFF', '#40C4FF', '#18FFFF', 
-            '#64FFDA', '#69F0AE', '#B2FF59', '#EEFF41', 
-            '#FFFF00', '#FFD740', '#FFAB40', '#FF6E40'
-        ];
-        return colors[index % colors.length];
     }
 });
