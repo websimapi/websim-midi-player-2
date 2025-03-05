@@ -117,11 +117,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Schedule all notes
         const now = Tone.now();
         const heightScale = 100; // Same scale factor as in parseMidiFile
+        const totalDuration = midiFile.duration;
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
-            // Set transition for smooth animation
-            element.style.transition = `bottom ${midiFile.duration}s linear`;
+            // Set transition for smooth animation with easing for better sync
+            element.style.transition = `bottom ${totalDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
                 element.style.bottom = '0px';
@@ -138,10 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     note.velocity
                 );
                 
-                // Schedule visual feedback
+                // Schedule visual feedback - snap the note to the key right before playing
                 Tone.Transport.schedule((time) => {
                     const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
                     if (noteEl) {
+                        // Force the note to be at the bottom position when it's being played
+                        noteEl.style.transition = 'bottom 0.1s ease-in';
+                        noteEl.style.bottom = '0px';
                         noteEl.classList.add('active');
                         
                         // Find the corresponding piano key
@@ -150,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             key.classList.add('active');
                         }
                     }
-                }, now + note.time);
+                }, now + note.time - 0.1); // Schedule slightly before to ensure visual sync
                 
                 // Schedule note end
                 Tone.Transport.schedule((time) => {

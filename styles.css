@@ -140,6 +140,7 @@ button:disabled {
     border-radius: 2px;
     transition: background-color 0.2s;
     opacity: 0.8;
+    will-change: bottom;
 }
 
 .note.active {
@@ -147,6 +148,7 @@ button:disabled {
     opacity: 1;
     box-shadow: 0 0 10px rgba(30, 215, 96, 0.7);
     z-index: 3;
+    transition: background-color 0.1s ease-in;
 }
 
 .piano-key.active {
