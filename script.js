@@ -120,8 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
-            // Set transition for faster animation - adjusted to match actual play time
-            const animationDuration = note.time + note.duration + 1; // Added duration + 1 to continue falling
+            // Set a faster animation speed to sync with actual playback
+            // Calculate animation duration based on note timing
+            const animationDuration = note.time * 0.5; // Much faster animation by reducing multiplier to 0.5
             element.style.transition = `bottom ${animationDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
