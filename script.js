@@ -52,53 +52,53 @@ document.addEventListener('DOMContentLoaded', () => {
         // Get the longest track duration to set the visualizer time scale
         let maxDuration = 0;
         
-        // Wait for next frame to ensure piano keys are properly rendered
-        requestAnimationFrame(() => {
-            // Process each track
-            midiFile.tracks.forEach((track, trackIndex) => {
-                const trackColor = getTrackColor(trackIndex);
-                
-                // Process notes in the track
-                track.notes.forEach(note => {
-                    // Calculate position and dimensions for visualization
-                    const key = findPianoKey(note.midi);
-                    if (!key) return;
-                    
-                    const keyPosition = key.getBoundingClientRect();
-                    const containerPosition = pianoContainer.getBoundingClientRect();
-                    const keyWidth = key.offsetWidth;
-                    
-                    // Calculate position relative to the container
-                    const relativeLeft = key.offsetLeft;
-                    
-                    const noteElement = document.createElement('div');
-                    noteElement.className = 'note';
-                    noteElement.style.left = `${relativeLeft}px`;
-                    noteElement.style.width = `${keyWidth}px`;
-                    noteElement.style.height = `${(note.duration / 2) * 100}px`;
-                    noteElement.style.backgroundColor = trackColor;
-                    
-                    noteElement.dataset.note = note.midi;
-                    noteElement.dataset.time = note.time;
-                    noteElement.dataset.duration = note.duration;
-                    
-                    notesContainer.appendChild(noteElement);
-                    notes.push({
-                        element: noteElement,
-                        note: note
-                    });
-                    
-                    // Update max duration
-                    const noteEnd = note.time + note.duration;
-                    if (noteEnd > maxDuration) {
-                        maxDuration = noteEnd;
-                    }
-                });
-            });
+        // Calculate visualization height based on total duration
+        const visualizerHeight = notesContainer.clientHeight;
+        const PIXELS_PER_SECOND = visualizerHeight / Math.max(5, midiFile.duration); // At least 5 seconds view
+        
+        // Process each track
+        midiFile.tracks.forEach((track, trackIndex) => {
+            const trackColor = getTrackColor(trackIndex);
             
-            // Enable play button
-            playButton.disabled = false;
+            // Process notes in the track
+            track.notes.forEach(note => {
+                // Calculate position and dimensions for visualization
+                const key = findPianoKey(note.midi);
+                if (!key) return;
+                
+                const keyRect = key.getBoundingClientRect();
+                const keyWidth = keyRect.width;
+                const keyLeft = key.offsetLeft;
+                
+                const noteElement = document.createElement('div');
+                noteElement.className = 'note';
+                noteElement.style.left = `${keyLeft}px`;
+                noteElement.style.width = `${keyWidth}px`;
+                noteElement.style.height = `${note.duration * PIXELS_PER_SECOND}px`;
+                noteElement.style.backgroundColor = trackColor;
+                
+                noteElement.dataset.note = note.midi;
+                noteElement.dataset.time = note.time;
+                noteElement.dataset.duration = note.duration;
+                
+                notesContainer.appendChild(noteElement);
+                notes.push({
+                    element: noteElement,
+                    note: note,
+                    startPosition: -note.duration * PIXELS_PER_SECOND, // Start position above the container
+                    endPosition: visualizerHeight - note.duration * PIXELS_PER_SECOND // End position at the bottom of the container
+                });
+                
+                // Update max duration
+                const noteEnd = note.time + note.duration;
+                if (noteEnd > maxDuration) {
+                    maxDuration = noteEnd;
+                }
+            });
         });
+        
+        // Enable play button
+        playButton.disabled = false;
     }
     
     function playMidi() {
@@ -113,96 +113,78 @@ document.addEventListener('DOMContentLoaded', () => {
         playButton.disabled = true;
         stopButton.disabled = false;
         
-        // Schedule all notes
         const now = Tone.now();
-        const animationDuration = 3; // seconds for note to fall down
+        const visualizerHeight = notesContainer.clientHeight;
         
-        // Reset all falling notes
-        document.querySelectorAll('.note.falling').forEach(el => {
-            el.classList.remove('falling');
-            el.style.transform = '';
-        });
-        
-        midiFile.tracks.forEach(track => {
-            track.notes.forEach(note => {
-                // Schedule note
-                synth.triggerAttackRelease(
-                    note.name,
-                    note.duration,
-                    now + note.time,
-                    note.velocity
-                );
+        // Schedule all notes
+        notes.forEach(({element, note}) => {
+            // Reset note position
+            element.style.transform = 'translateY(-100%)';
+            
+            // Set transition duration based on note timing
+            const fallDuration = note.time;
+            element.style.transitionDuration = `${fallDuration}s`;
+            
+            // Schedule note to start falling
+            setTimeout(() => {
+                element.classList.add('falling');
+            }, 10); // Small delay to ensure CSS is applied
+            
+            // Schedule note playback
+            synth.triggerAttackRelease(
+                note.name,
+                note.duration,
+                now + note.time,
+                note.velocity
+            );
+            
+            // Schedule visual feedback when note is played
+            Tone.Transport.schedule((time) => {
+                element.classList.add('active');
                 
-                // Find the note element
-                const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
-                if (noteEl) {
-                    // Start animation before the note should play
-                    const startAnimationTime = Math.max(0, note.time - animationDuration);
-                    
-                    // Set initial position at the top
-                    noteEl.style.transform = 'translateY(0)';
-                    
-                    // Schedule falling animation
-                    setTimeout(() => {
-                        noteEl.style.transition = `transform ${animationDuration}s linear`;
-                        noteEl.classList.add('falling');
-                        
-                        // Calculate exact distance to fall
-                        const notesContainerHeight = notesContainer.offsetHeight;
-                        const noteHeight = noteEl.offsetHeight;
-                        const distance = notesContainerHeight + noteHeight;
-                        
-                        noteEl.style.transform = `translateY(${distance}px)`;
-                    }, startAnimationTime * 1000);
-                    
-                    // Schedule visual feedback when note hits piano key
-                    setTimeout(() => {
-                        noteEl.classList.add('active');
-                        
-                        // Find the corresponding piano key
-                        const key = findPianoKey(note.midi);
-                        if (key) {
-                            key.classList.add('active');
-                        }
-                    }, note.time * 1000);
-                    
-                    // Schedule note end
-                    setTimeout(() => {
-                        noteEl.classList.remove('active');
-                        
-                        // Find the corresponding piano key
-                        const key = findPianoKey(note.midi);
-                        if (key) {
-                            key.classList.remove('active');
-                        }
-                    }, (note.time + note.duration) * 1000);
+                // Find the corresponding piano key
+                const key = findPianoKey(note.midi);
+                if (key) {
+                    key.classList.add('active');
                 }
-            });
+            }, now + note.time);
+            
+            // Schedule note end
+            Tone.Transport.schedule((time) => {
+                element.classList.remove('active');
+                
+                // Find the corresponding piano key
+                const key = findPianoKey(note.midi);
+                if (key) {
+                    key.classList.remove('active');
+                }
+            }, now + note.time + note.duration);
         });
         
         // Schedule stop at the end
-        setTimeout(() => {
+        Tone.Transport.schedule(() => {
             stopMidi();
-        }, (midiFile.duration + 1) * 1000);
+        }, now + midiFile.duration + 1);
+        
+        Tone.Transport.start();
     }
     
     function stopMidi() {
         if (!isPlaying) return;
         
         synth.releaseAll();
-        // Tone.Transport.cancel();
-        // Tone.Transport.stop();
+        Tone.Transport.cancel();
+        Tone.Transport.stop();
         
         // Reset all active notes and keys
         document.querySelectorAll('.note.active, .piano-key.active').forEach(el => {
             el.classList.remove('active');
         });
         
-        // Reset all falling animations
+        // Reset all falling notes
         document.querySelectorAll('.note.falling').forEach(el => {
             el.classList.remove('falling');
-            el.style.transition = '';
-            el.style.transform = '';
+            el.style.transform = 'translateY(-100%)';
         });
         
         isPlaying = false;
