@@ -69,6 +69,7 @@ input[type="file"] {
 
 button {
     padding: 10px 20px;
+    min-width: 100px;
     border: none;
     border-radius: 30px;
     background-color: #1ed760;

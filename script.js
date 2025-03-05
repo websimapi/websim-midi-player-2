@@ -4,31 +4,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileNameDisplay = document.getElementById('file-name');
     const playButton = document.getElementById('play-button');
     const stopButton = document.getElementById('stop-button');
+    const restartButton = document.getElementById('restart-button');
     const pianoContainer = document.getElementById('piano-container');
     const notesContainer = document.getElementById('notes-container');
     const statusMessage = document.getElementById('status-message');
     const aiToggle = document.getElementById('ai-toggle');
+    const fullAnalysisToggle = document.getElementById('full-analysis-toggle');
 
     // State variables
     let midiFile = null;
     let player = null;
     let synth = null;
     let isPlaying = false;
+    let isPaused = false;
+    let pausedTime = 0;
+    let startOffset = 0;
     let aiSuggestions = [];
     let originalMidiData = [];
     let isCapturing = false;
     let captureStartTime = 0;
     let isAiMode = false;
+    let isFullAnalysis = false;
+    let analysisDuration = 15; // Default 15 seconds
+    let scheduledEvents = [];
 
     // Initialize the piano keyboard (88 keys)
     initPiano();
 
     // Event listeners
     midiUpload.addEventListener('change', handleMidiUpload);
-    playButton.addEventListener('click', playMidi);
+    playButton.addEventListener('click', togglePlayPause);
     stopButton.addEventListener('click', stopMidi);
+    restartButton.addEventListener('click', restartMidi);
     aiToggle.addEventListener('change', (e) => {
         isAiMode = e.target.checked;
+    });
+    fullAnalysisToggle.addEventListener('change', (e) => {
+        isFullAnalysis = e.target.checked;
+        if (isFullAnalysis) {
+            analysisDuration = Number.MAX_SAFE_INTEGER; // Effectively the full song
+        } else {
+            analysisDuration = 15; // Default 15 seconds
+        }
     });
 
     // Initialize Tone.js synth
@@ -75,14 +92,61 @@ document.addEventListener('DOMContentLoaded', () => {
         // Sort notes by time
         originalMidiData.sort((a, b) => a.time - b.time);
 
-        // Enable play button
+        // Enable play and restart buttons
         playButton.disabled = false;
+        restartButton.disabled = false;
+
+        // Reset status message and playback state
+        statusMessage.textContent = '';
+        isPaused = false;
+        pausedTime = 0;
+        startOffset = 0;
 
         // Disable the stop button until playing
         stopButton.disabled = true;
+    }
 
-        // Reset status message
-        statusMessage.textContent = '';
+    function togglePlayPause() {
+        if (!midiFile) return;
+
+        if (isPlaying) {
+            // Pause playback
+            pauseMidi();
+        } else {
+            // Start or resume playback
+            playMidi();
+        }
+    }
+
+    function pauseMidi() {
+        if (!isPlaying) return;
+
+        // Store the current time as the pause time
+        pausedTime = Tone.now() - startOffset;
+        
+        // Cancel all scheduled events
+        Tone.Transport.cancel();
+        scheduledEvents.forEach(id => Tone.Transport.clear(id));
+        scheduledEvents = [];
+        
+        // Stop the transport
+        Tone.Transport.pause();
+        synth.releaseAll();
+        
+        // Update UI
+        document.querySelectorAll('.piano-key.active, .piano-key.ai-active').forEach(el => {
+            el.classList.remove('active', 'ai-active');
+        });
+        
+        isPlaying = false;
+        isPaused = true;
+        playButton.textContent = "Resume";
+        stopButton.disabled = false;
+        
+        // If we were capturing but paused, keep the capture state
+        if (isCapturing) {
+            statusMessage.textContent = 'Capture paused. Resume to continue capture.';
+        }
     }
 
     async function playMidi() {
@@ -90,12 +154,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset Tone.js context if it's suspended
         if (Tone.context.state !== 'running') {
-            Tone.context.resume();
+            await Tone.context.resume();
         }
 
         isPlaying = true;
-        playButton.disabled = true;
+        playButton.textContent = "Pause";
+        playButton.disabled = false;
         stopButton.disabled = false;
+        restartButton.disabled = false;
 
         // If in AI mode and we have suggestions, play with AI additions
         const notesToPlay = isAiMode && aiSuggestions.length > 0 
@@ -106,26 +172,40 @@ document.addEventListener('DOMContentLoaded', () => {
         notesToPlay.sort((a, b) => a.time - b.time);
 
         // If we're not in AI mode and we don't have AI suggestions yet, capture for LLM analysis
-        if (!isAiMode && aiSuggestions.length === 0) {
+        if (!isAiMode && aiSuggestions.length === 0 && !isPaused) {
             isCapturing = true;
             captureStartTime = Tone.now();
-            statusMessage.textContent = 'Capturing first 15 seconds for AI analysis...';
+            statusMessage.textContent = isFullAnalysis 
+                ? 'Capturing full song for AI analysis...' 
+                : `Capturing first ${analysisDuration} seconds for AI analysis...`;
         }
 
-        // Schedule all notes
+        // Calculate the start time based on whether we're resuming or starting fresh
+        startOffset = isPaused ? pausedTime : Tone.now();
         const now = Tone.now();
+        
+        // Filter notes based on the current playback position if resuming
+        const remainingNotes = isPaused 
+            ? notesToPlay.filter(note => note.time > (pausedTime - startOffset + 0.1)) 
+            : notesToPlay;
 
-        notesToPlay.forEach(note => {
+        // Schedule all notes
+        remainingNotes.forEach(note => {
+            // Adjust time based on the pause time if resuming
+            const adjustedTime = isPaused 
+                ? now + (note.time - (pausedTime - startOffset + 0.1)) 
+                : now + note.time;
+
             // Schedule note
             synth.triggerAttackRelease(
                 note.name,
                 note.duration,
-                now + note.time,
+                adjustedTime,
                 note.velocity
             );
 
             // Schedule visual feedback
-            Tone.Transport.schedule((time) => {
+            const noteOnId = Tone.Transport.schedule((time) => {
                 // Find the corresponding piano key
                 const key = findPianoKey(note.midi);
                 if (key) {
@@ -135,50 +215,61 @@ document.addEventListener('DOMContentLoaded', () => {
                         key.classList.add('active');
                     }
                 }
-            }, now + note.time);
+            }, adjustedTime);
+            scheduledEvents.push(noteOnId);
 
             // Schedule note end
-            Tone.Transport.schedule((time) => {
+            const noteOffId = Tone.Transport.schedule((time) => {
                 // Find the corresponding piano key
                 const key = findPianoKey(note.midi);
                 if (key) {
                     key.classList.remove('active', 'ai-active');
                 }
-            }, now + note.time + note.duration);
+            }, adjustedTime + note.duration);
+            scheduledEvents.push(noteOffId);
         });
 
         // If capturing, schedule the LLM analysis
         if (isCapturing) {
-            Tone.Transport.schedule(async () => {
-                // Get the first 15 seconds of notes
-                const fifteenSecondData = originalMidiData.filter(note => note.time < 15);
+            const captureEndTime = isFullAnalysis 
+                ? Math.max(...notesToPlay.map(note => note.time + note.duration))
+                : analysisDuration;
+                
+            const captureId = Tone.Transport.schedule(async () => {
+                // Get the notes from the captured duration
+                const capturedData = originalMidiData.filter(note => note.time < captureEndTime);
                 isCapturing = false;
 
                 // Show analyzing message
                 statusMessage.textContent = 'AI is analyzing your music...';
 
                 // Request AI suggestions
-                await generateAiSuggestions(fifteenSecondData);
+                await generateAiSuggestions(capturedData);
 
                 // Update status once we have suggestions
                 statusMessage.textContent = 'AI suggestions ready! Toggle "AI Mode" to hear them.';
-            }, now + 15);
+            }, now + captureEndTime);
+            scheduledEvents.push(captureId);
         }
 
         // Schedule stop at the end
         const totalDuration = Math.max(...notesToPlay.map(note => note.time + note.duration));
-        Tone.Transport.schedule(() => {
+        const stopId = Tone.Transport.schedule(() => {
             stopMidi();
         }, now + totalDuration + 0.5);
+        scheduledEvents.push(stopId);
 
         Tone.Transport.start();
+        isPaused = false;
     }
 
     function stopMidi() {
-        if (!isPlaying) return;
+        if (!midiFile) return;
 
         synth.releaseAll();
         Tone.Transport.cancel();
+        scheduledEvents.forEach(id => Tone.Transport.clear(id));
+        scheduledEvents = [];
         Tone.Transport.stop();
 
         // Reset all active notes and keys
@@ -187,6 +278,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         isPlaying = false;
+        isPaused = false;
+        pausedTime = 0;
+        startOffset = 0;
+        playButton.textContent = "Play";
         playButton.disabled = false;
         stopButton.disabled = true;
 
@@ -195,6 +290,15 @@ document.addEventListener('DOMContentLoaded', () => {
             isCapturing = false;
             statusMessage.textContent = 'Capture canceled. Play again to restart capture.';
         }
+    }
+
+    function restartMidi() {
+        stopMidi();
+        // Reset playback position
+        pausedTime = 0;
+        startOffset = 0;
+        // Start playing from the beginning
+        playMidi();
     }
 
     async function generateAiSuggestions(capturedNotes) {
@@ -210,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // LLM prompt to analyze music and suggest additions
             const prompt = `
-As a musical AI, analyze these MIDI notes from the first 15 seconds of a piece:
+As a musical AI, analyze these MIDI notes ${isFullAnalysis ? 'from the full song' : 'from the first part of a piece'}:
 ${JSON.stringify(musicData, null, 2)}
 
 Based on this melody and harmony pattern, suggest 5-10 additional notes that would complement the piece.
