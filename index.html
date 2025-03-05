@@ -1,8 +1,3 @@
-<div class="player-controls">
-    <button id="play-button" disabled>Play</button>
-    <button id="stop-button" disabled>Stop</button>
-    <button id="restart-button" disabled>Restart</button>
-</div>
 <div class="toggle-container">
     <span class="toggle-label">Original</span>
     <label class="toggle-switch">
@@ -12,12 +7,14 @@
     <span class="toggle-label">AI Mode</span>
 </div>
 <div class="toggle-container">
-    <span class="toggle-label">15 Sec</span>
-    <label class="toggle-switch">
-        <input type="checkbox" id="full-analysis-toggle">
-        <span class="slider"></span>
-    </label>
-    <span class="toggle-label">Full Song</span>
+    <span class="toggle-label">Capture: </span>
+    <select id="capture-duration">
+        <option value="15">15 seconds</option>
+        <option value="30">30 seconds</option>
+        <option value="60">60 seconds</option>
+        <option value="full">Full song</option>
+    </select>
+    <button id="restart-button" disabled>Restart</button>
 </div>
 <p class="status-message" id="status-message"></p>
 
