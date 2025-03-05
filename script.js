@@ -49,12 +49,11 @@ document.addEventListener('DOMContentLoaded', () => {
         notesContainer.innerHTML = '';
         notes = [];
         
-        // Get the longest track duration to set the visualizer time scale
-        let maxDuration = 0;
-        
         // Calculate visualization height based on total duration
         const visualizerHeight = notesContainer.clientHeight;
-        const PIXELS_PER_SECOND = visualizerHeight / Math.max(5, midiFile.duration); // At least 5 seconds view
+        
+        // Adjust this value to zoom in more (higher value) or less (lower value)
+        const PIXELS_PER_SECOND = visualizerHeight / Math.min(midiFile.duration, 10); // Show at most 10 seconds view
         
         // Process each track
         midiFile.tracks.forEach((track, trackIndex) => {
@@ -66,17 +65,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const key = findPianoKey(note.midi);
                 if (!key) return;
                 
-                const keyRect = key.getBoundingClientRect();
-                const keyWidth = keyRect.width;
                 const keyLeft = key.offsetLeft;
+                const keyWidth = key.offsetWidth;
                 
                 const noteElement = document.createElement('div');
                 noteElement.className = 'note';
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
                 noteElement.style.height = `${note.duration * PIXELS_PER_SECOND}px`;
-                noteElement.style.top = `${-note.duration * PIXELS_PER_SECOND}px`; // Start above visible area
+                noteElement.style.bottom = `${visualizerHeight + (note.time * PIXELS_PER_SECOND)}px`; // Position relative to bottom
                 noteElement.style.backgroundColor = trackColor;
+                noteElement.style.position = 'absolute';
                 
                 noteElement.dataset.note = note.midi;
                 noteElement.dataset.time = note.time;
@@ -85,14 +84,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 notesContainer.appendChild(noteElement);
                 notes.push({
                     element: noteElement,
-                    note: note
+                    note: note,
+                    bottom: parseFloat(noteElement.style.bottom)
                 });
-                
-                // Update max duration
-                const noteEnd = note.time + note.duration;
-                if (noteEnd > maxDuration) {
-                    maxDuration = noteEnd;
-                }
             });
         });
         
@@ -114,23 +108,30 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const now = Tone.now();
         const visualizerHeight = notesContainer.clientHeight;
+        const pianoHeight = pianoContainer.clientHeight;
         
         // Schedule all notes
         notes.forEach(({element, note}) => {
-            // Calculate the fall duration and distance
+            // Calculate the total distance the note needs to travel
+            const totalDistance = parseFloat(element.style.bottom) + pianoHeight;
+            
+            // Calculate the fall duration 
             const fallDuration = note.time;
-            const fallDistance = visualizerHeight + parseInt(element.style.top);
             
-            // Set initial position
-            element.style.transform = 'translateY(0)';
+            // Set initial position (off-screen)
+            element.style.transition = 'none';
+            element.style.transform = 'translateY(-' + totalDistance + 'px)';
             
-            // Schedule note to start falling after a small delay
+            // Force reflow
+            element.offsetHeight;
+            
+            // Schedule note to start falling
             setTimeout(() => {
                 // Set the transition timing
                 element.style.transition = `transform ${fallDuration}s linear`;
                 
-                // Start the falling animation
-                element.style.transform = `translateY(${fallDistance}px)`;
+                // Start the falling animation to reach the piano keys exactly when the note should play
+                element.style.transform = 'translateY(0)';
             }, 10);
             
             // Schedule note playback
@@ -184,10 +185,10 @@ document.addEventListener('DOMContentLoaded', () => {
             el.classList.remove('active');
         });
         
-        // Reset all falling notes
-        document.querySelectorAll('.note').forEach(el => {
-            el.style.transition = 'none';
-            el.style.transform = 'translateY(0)';
+        // Reset all notes to their original positions
+        notes.forEach(({element}) => {
+            element.style.transition = 'none';
+            element.style.transform = 'translateY(-' + parseFloat(element.style.bottom) + 'px)';
         });
         
         isPlaying = false;
@@ -206,8 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
             key.className = `piano-key ${isBlack ? 'black' : 'white'}`;
             key.dataset.midi = midi;
             
-            // Adjust width based on key type
-            key.style.width = isBlack ? '8px' : '14px';
+            // Adjust width based on key type - slightly wider keys
+            key.style.width = isBlack ? '10px' : '16px';
             
             pianoContainer.appendChild(key);
         }
