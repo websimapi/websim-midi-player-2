@@ -133,7 +133,6 @@ button:disabled {
     width: 100%;
     height: calc(100% - 60px);
     padding: 0 20px;
-    overflow: visible;
 }
 
 .note {
@@ -141,7 +140,7 @@ button:disabled {
     border-radius: 2px;
     transition: background-color 0.2s;
     opacity: 0.8;
-    pointer-events: none;
+    overflow: hidden;
 }
 
 .note.active {
@@ -149,6 +148,23 @@ button:disabled {
     opacity: 1;
     box-shadow: 0 0 10px rgba(30, 215, 96, 0.7);
     z-index: 3;
+}
+
+.note-particle {
+    position: absolute;
+    border-radius: 2px;
+    animation: particleFade 0.5s forwards;
+}
+
+@keyframes particleFade {
+    0% {
+        opacity: 1;
+        transform: translateY(0) rotate(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(20px) rotate(45deg);
+    }
 }
 
 .piano-key.active {

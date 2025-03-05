@@ -125,8 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
             element.style.transition = `bottom ${animationDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
-                // Position to negative value to continue past the bottom
-                element.style.bottom = `-${note.duration * heightScale}px`;
+                element.style.bottom = '0px';
             }, 10);
         });
         
@@ -151,6 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (key) {
                             key.classList.add('active');
                         }
+                        
+                        // Create shatter effect
+                        createShatterEffect(noteEl);
                     }
                 }, now + note.time);
                 
@@ -234,5 +236,53 @@ document.addEventListener('DOMContentLoaded', () => {
             '#FFFF00', '#FFD740', '#FFAB40', '#FF6E40'
         ];
         return colors[index % colors.length];
+    }
+    
+    function createShatterEffect(noteEl) {
+        // Get the note's color and dimensions
+        const noteColor = window.getComputedStyle(noteEl).backgroundColor;
+        const noteRect = noteEl.getBoundingClientRect();
+        const noteWidth = noteEl.offsetWidth;
+        
+        // Create particles for shatter effect
+        const particleCount = 8;
+        const particleSize = noteWidth / 4;
+        
+        // Create the particles at the bottom of the note
+        for (let i = 0; i < particleCount; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'note-particle';
+            particle.style.backgroundColor = noteColor;
+            particle.style.width = `${particleSize}px`;
+            particle.style.height = `${particleSize}px`;
+            
+            // Position particle at the bottom of the note
+            particle.style.left = `${(i / particleCount) * noteWidth}px`;
+            particle.style.bottom = '0px';
+            
+            noteEl.appendChild(particle);
+            
+            // Remove particles after animation finishes
+            setTimeout(() => {
+                if (particle.parentNode) {
+                    particle.parentNode.removeChild(particle);
+                }
+            }, 500);
+        }
+        
+        // Gradually "eat" the note by reducing its height
+        const originalHeight = parseFloat(noteEl.style.height);
+        const consumptionRate = originalHeight / (parseFloat(noteEl.dataset.duration) * 1000); // pixels per millisecond
+        
+        let consumed = 0;
+        const consumeInterval = setInterval(() => {
+            consumed += consumptionRate * 16; // 16ms is approx frame time at 60fps
+            if (consumed >= originalHeight) {
+                clearInterval(consumeInterval);
+                noteEl.style.height = '0px';
+            } else {
+                noteEl.style.height = `${originalHeight - consumed}px`;
+            }
+        }, 16);
     }
 });
