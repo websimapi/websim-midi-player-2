@@ -70,8 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.className = 'note';
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
-                noteElement.style.top = `${(note.time / 2) * 100}px`;
-                noteElement.style.height = `${(note.duration / 2) * 100}px`;
+                // Position notes at the top, with their bottom edge at the time position
+                noteElement.style.top = `-${(note.time / midiFile.duration) * 100}%`;
+                noteElement.style.height = `${(note.duration / midiFile.duration) * 100}%`;
                 noteElement.style.backgroundColor = trackColor;
                 
                 noteElement.dataset.note = note.midi;
@@ -107,6 +108,11 @@ document.addEventListener('DOMContentLoaded', () => {
         isPlaying = true;
         playButton.disabled = true;
         stopButton.disabled = false;
+        
+        // Set up note scrolling animation
+        document.querySelectorAll('.note').forEach(noteEl => {
+            noteEl.style.animation = `scrollDown ${midiFile.duration}s linear forwards`;
+        });
         
         // Schedule all notes
         const now = Tone.now();
@@ -169,6 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset all active notes and keys
         document.querySelectorAll('.note.active, .piano-key.active').forEach(el => {
             el.classList.remove('active');
+        });
+        
+        // Remove animations when stopped
+        document.querySelectorAll('.note').forEach(noteEl => {
+            noteEl.style.animation = 'none';
         });
         
         isPlaying = false;

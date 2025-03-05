@@ -128,19 +128,26 @@ button:disabled {
 
 #notes-container {
     position: absolute;
-    top: 0;
+    bottom: 60px;
     left: 0;
     width: 100%;
     height: calc(100% - 60px);
     padding: 0 20px;
+    overflow: hidden;
 }
 
 .note {
     position: absolute;
     border-radius: 2px;
     transition: background-color 0.2s;
+    transform: translateY(0); /* Initial position */
 }
 
 .note.active {
     background-color: #1ed760 !important;
+}
+
+@keyframes scrollDown {
+    from { transform: translateY(-100vh); }
+    to { transform: translateY(0); }
 }
