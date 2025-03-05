@@ -150,18 +150,16 @@ button:disabled {
     z-index: 3;
 }
 
+.note.falling {
+    z-index: 1;
+    transition-property: bottom;
+    will-change: bottom;
+}
+
 .note.finished {
-    opacity: 0;
-}
-
-.note.falling {
-    z-index: 1;
-    transition-timing-function: linear !important;
-}
-
-.note.falling {
-    z-index: 1;
-    transition-timing-function: linear !important;
+    opacity: 0.3;
+    transform: translateY(100%);
+    pointer-events: none;
 }
 
 .piano-key.active {

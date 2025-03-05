@@ -116,28 +116,33 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const now = Tone.now();
         const totalDuration = midiFile.duration;
+        // Calculate container height for proper falling speed
+        const containerHeight = notesContainer.clientHeight;
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
             // Calculate proper timing for this note
             element.classList.add('falling');
             
-            // Set transition duration to match the total playback duration
-            element.style.transition = `bottom ${totalDuration}s linear`;
+            // Calculate note falling speed based on container height and song duration
+            // This ensures notes arrive at keyboard precisely when they should play
+            const fallingSpeed = containerHeight / totalDuration;
+            const noteTime = note.time;
+            const noteDuration = note.duration;
             
-            // Calculate the final position based on timing
-            const startPosition = notesContainer.clientHeight + (note.time * 100);
-            const finalPosition = -(note.duration * 100);
+            // Calculate distance and timing precisely
+            const startDistance = containerHeight + (noteTime * fallingSpeed);
+            const finalDistance = -(noteDuration * fallingSpeed);
             
-            // Reset starting position
-            element.style.bottom = `${startPosition}px`;
+            // Set transition duration to match the time it takes for this note to fall
+            element.style.transition = `bottom ${totalDuration - noteTime}s linear`;
             
-            // Position after transition should have the note at the keyboard at exactly the right time
+            // Reset starting position (off-screen above container)
+            element.style.bottom = `${startDistance}px`;
+            
+            // Trigger the animation after a brief delay to ensure proper rendering
             setTimeout(() => {
-                // The distance the note needs to travel is startPosition
-                // It needs to arrive at the keyboard when note.time seconds have elapsed
-                // So we set the bottom to a negative value that ensures it passes through 0
-                element.style.bottom = `${finalPosition}px`;
+                element.style.bottom = `${finalDistance}px`;
             }, 10);
         });
         
