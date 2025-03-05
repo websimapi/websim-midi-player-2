@@ -75,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
                 noteElement.style.height = `${note.duration * PIXELS_PER_SECOND}px`;
+                noteElement.style.top = `${-note.duration * PIXELS_PER_SECOND}px`; // Start above visible area
                 noteElement.style.backgroundColor = trackColor;
                 
                 noteElement.dataset.note = note.midi;
@@ -84,9 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 notesContainer.appendChild(noteElement);
                 notes.push({
                     element: noteElement,
-                    note: note,
-                    startPosition: -note.duration * PIXELS_PER_SECOND, // Start position above the container
-                    endPosition: visualizerHeight - note.duration * PIXELS_PER_SECOND // End position at the bottom of the container
+                    note: note
                 });
                 
                 // Update max duration
@@ -118,17 +117,21 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Schedule all notes
         notes.forEach(({element, note}) => {
-            // Reset note position
-            element.style.transform = 'translateY(-100%)';
-            
-            // Set transition duration based on note timing
+            // Calculate the fall duration and distance
             const fallDuration = note.time;
-            element.style.transitionDuration = `${fallDuration}s`;
+            const fallDistance = visualizerHeight + parseInt(element.style.top);
             
-            // Schedule note to start falling
+            // Set initial position
+            element.style.transform = 'translateY(0)';
+            
+            // Schedule note to start falling after a small delay
             setTimeout(() => {
-                element.classList.add('falling');
-            }, 10); // Small delay to ensure CSS is applied
+                // Set the transition timing
+                element.style.transition = `transform ${fallDuration}s linear`;
+                
+                // Start the falling animation
+                element.style.transform = `translateY(${fallDistance}px)`;
+            }, 10);
             
             // Schedule note playback
             synth.triggerAttackRelease(
@@ -182,9 +185,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Reset all falling notes
-        document.querySelectorAll('.note.falling').forEach(el => {
-            el.classList.remove('falling');
-            el.style.transform = 'translateY(-100%)';
+        document.querySelectorAll('.note').forEach(el => {
+            el.style.transition = 'none';
+            el.style.transform = 'translateY(0)';
         });
         
         isPlaying = false;

@@ -139,14 +139,7 @@ button:disabled {
 .note {
     position: absolute;
     border-radius: 2px;
-    transition: transform 0.1s;
-    top: 0;
-    transform: translateY(-100%);
-}
-
-.note.falling {
     transform: translateY(0);
-    transition: transform linear;
 }
 
 .note.active {
