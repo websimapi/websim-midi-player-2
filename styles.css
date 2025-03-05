@@ -97,7 +97,7 @@ button:disabled {
     margin-top: 20px;
     position: relative;
     height: 300px;
-    overflow: hidden;
+    overflow: visible;
 }
 
 #piano-container {
@@ -133,7 +133,6 @@ button:disabled {
     width: 100%;
     height: calc(100% - 60px);
     padding: 0 20px;
-    overflow: hidden;
 }
 
 .note {
@@ -141,6 +140,7 @@ button:disabled {
     border-radius: 2px;
     transition: background-color 0.2s;
     opacity: 0.8;
+    pointer-events: none;
 }
 
 .note.active {
