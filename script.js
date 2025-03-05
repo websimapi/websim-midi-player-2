@@ -121,11 +121,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
             // Set transition for faster animation - adjusted to match actual play time
-            const animationDuration = note.time;
+            const animationDuration = note.time + note.duration + 1; // Added duration + 1 to continue falling
             element.style.transition = `bottom ${animationDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
-                element.style.bottom = '0px';
+                element.style.bottom = '-100px'; // Fall below keyboard
             }, 10);
         });
         
@@ -158,7 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
                     if (noteEl) {
                         noteEl.classList.remove('active');
-                        noteEl.classList.add('played');
                         
                         // Find the corresponding piano key
                         const key = findPianoKey(note.midi);
@@ -190,13 +189,12 @@ document.addEventListener('DOMContentLoaded', () => {
             el.classList.remove('active');
         });
         
-        // Reset note positions and remove 'played' class
+        // Reset note positions
         notes.forEach(({element, note}) => {
             const time = parseFloat(element.dataset.time);
             const heightScale = 100;
             element.style.transition = 'none'; // Disable transition for immediate positioning
             element.style.bottom = `${notesContainer.clientHeight + (time * heightScale)}px`;
-            element.classList.remove('played');
         });
         
         isPlaying = false;
