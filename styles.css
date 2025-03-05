@@ -139,8 +139,7 @@ button:disabled {
 .note {
     position: absolute;
     border-radius: 2px;
-    transition: transform 0.1s;
-    top: -100%;
+    top: 0;
     transform: translateY(0);
 }
 
@@ -149,6 +148,6 @@ button:disabled {
 }
 
 .note.falling {
-    transform: translateY(200%);
     transition: transform linear;
+    transform: translateY(200%);
 }
