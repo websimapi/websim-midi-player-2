@@ -114,23 +114,34 @@ document.addEventListener('DOMContentLoaded', () => {
         playButton.disabled = true;
         stopButton.disabled = false;
         
-        // Schedule all notes
         const now = Tone.now();
-        const heightScale = 100; // Same scale factor as in parseMidiFile
+        const totalDuration = midiFile.duration;
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
-            // Add the falling class to all notes
+            // Calculate proper timing for this note
             element.classList.add('falling');
-            // Set transition for faster animation - adjusted to match actual play time
-            const animationDuration = note.time;
-            element.style.transition = `bottom ${animationDuration}s linear`;
-            // Animate to final position - delayed by a small amount to ensure the transition applies
+            
+            // Set transition duration to match the total playback duration
+            element.style.transition = `bottom ${totalDuration}s linear`;
+            
+            // Calculate the final position based on timing
+            const startPosition = notesContainer.clientHeight + (note.time * 100);
+            const finalPosition = -(note.duration * 100);
+            
+            // Reset starting position
+            element.style.bottom = `${startPosition}px`;
+            
+            // Position after transition should have the note at the keyboard at exactly the right time
             setTimeout(() => {
-                element.style.bottom = '-1000px'; // Continue falling beyond the keyboard
+                // The distance the note needs to travel is startPosition
+                // It needs to arrive at the keyboard when note.time seconds have elapsed
+                // So we set the bottom to a negative value that ensures it passes through 0
+                element.style.bottom = `${finalPosition}px`;
             }, 10);
         });
         
+        // Schedule all notes with Tone.js
         midiFile.tracks.forEach(track => {
             track.notes.forEach(note => {
                 // Schedule note
