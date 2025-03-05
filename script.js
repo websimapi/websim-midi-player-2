@@ -70,9 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.className = 'note';
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
-                // Position notes initially above the viewport so they can scroll down
-                noteElement.style.bottom = `${(note.time / midiFile.duration) * 100 + 100}%`;
-                noteElement.style.height = `${(note.duration / midiFile.duration) * 100}%`;
+                noteElement.style.top = '0';
+                noteElement.style.height = `${(note.duration / 2) * 100}px`;
                 noteElement.style.backgroundColor = trackColor;
                 
                 noteElement.dataset.note = note.midi;
@@ -109,13 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
         playButton.disabled = true;
         stopButton.disabled = false;
         
-        // Set up note scrolling animation
-        document.querySelectorAll('.note').forEach(noteEl => {
-            noteEl.style.animation = `scrollUp ${midiFile.duration}s linear forwards`;
-        });
-        
         // Schedule all notes
         const now = Tone.now();
+        const animationDuration = 3; // seconds for note to fall down
         
         midiFile.tracks.forEach(track => {
             track.notes.forEach(note => {
@@ -127,10 +122,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     note.velocity
                 );
                 
-                // Schedule visual feedback
-                Tone.Transport.schedule((time) => {
-                    const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
-                    if (noteEl) {
+                // Find the note element
+                const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
+                if (noteEl) {
+                    // Start animation before the note should play
+                    const startAnimationTime = Math.max(0, note.time - animationDuration);
+                    
+                    // Schedule falling animation
+                    Tone.Transport.schedule((time) => {
+                        noteEl.style.transition = `transform ${animationDuration}s linear`;
+                        noteEl.classList.add('falling');
+                    }, now + startAnimationTime);
+                    
+                    // Schedule visual feedback when note hits piano key
+                    Tone.Transport.schedule((time) => {
                         noteEl.classList.add('active');
                         
                         // Find the corresponding piano key
@@ -138,13 +143,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (key) {
                             key.classList.add('active');
                         }
-                    }
-                }, now + note.time);
-                
-                // Schedule note end
-                Tone.Transport.schedule((time) => {
-                    const noteEl = document.querySelector(`.note[data-note="${note.midi}"][data-time="${note.time}"]`);
-                    if (noteEl) {
+                    }, now + note.time);
+                    
+                    // Schedule note end
+                    Tone.Transport.schedule((time) => {
                         noteEl.classList.remove('active');
                         
                         // Find the corresponding piano key
@@ -152,8 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (key) {
                             key.classList.remove('active');
                         }
-                    }
-                }, now + note.time + note.duration);
+                    }, now + note.time + note.duration);
+                }
             });
         });
         
@@ -177,12 +179,11 @@ document.addEventListener('DOMContentLoaded', () => {
             el.classList.remove('active');
         });
         
-        // Remove animations when stopped
-        document.querySelectorAll('.note').forEach(noteEl => {
-            noteEl.style.animation = 'none';
-            // Reset the note position to its original position
-            const time = parseFloat(noteEl.dataset.time);
-            noteEl.style.bottom = `${(time / midiFile.duration) * 100 + 100}%`;
+        // Reset all falling animations
+        document.querySelectorAll('.note.falling').forEach(el => {
+            el.classList.remove('falling');
+            el.style.transition = '';
+            el.style.transform = '';
         });
         
         isPlaying = false;
