@@ -83,8 +83,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.style.height = `${noteHeight}px`;
                 noteElement.style.backgroundColor = trackColor;
                 
-                // Position all notes above the container initially
-                noteElement.style.bottom = `${visualizerHeight}px`;
+                // Position all notes above the container initially with additional 200px offset
+                noteElement.style.bottom = `${visualizerHeight + 200}px`;
                 
                 noteElement.dataset.note = note.midi;
                 noteElement.dataset.time = note.time;
@@ -159,9 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Position calculation: how far the note has moved since the start
             const distanceToTravel = (currentTime - noteStartTime) * pixelsPerSecond;
             
-            // Bottom position is calculated relative to the bottom of the container
-            // When distanceToTravel is 0, the note should be at the top of the visualizer
-            const bottomPosition = visualizerHeight - distanceToTravel;
+            // Add a 200px offset to fix alignment (visualizerHeight + 200)
+            const bottomPosition = (visualizerHeight + 200) - distanceToTravel;
             
             // Set the position
             element.style.bottom = `${bottomPosition}px`;
@@ -203,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Reset note positions and remove finished class
         noteElements.forEach(({element}) => {
-            element.style.bottom = `${visualizerHeight}px`;
+            element.style.bottom = `${visualizerHeight + 200}px`;
             element.classList.remove('falling');
             element.classList.remove('active');
             element.classList.remove('finished');
