@@ -71,8 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteElement.style.left = `${keyLeft}px`;
                 noteElement.style.width = `${keyWidth}px`;
                 
-                // Position notes above viewport initially with fixed distance calculation
-                const heightScale = 200; // Increased scale factor for faster falling
+                // Position notes above viewport initially, they'll fall down during playback
+                const heightScale = 100; // Scale factor for note height
                 noteElement.style.bottom = `${notesContainer.clientHeight + (note.time * heightScale)}px`;
                 noteElement.style.height = `${note.duration * heightScale}px`;
                 noteElement.style.backgroundColor = trackColor;
@@ -116,13 +116,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Schedule all notes
         const now = Tone.now();
-        const heightScale = 200; // Same increased scale factor as in parseMidiFile
-        const fallDuration = midiFile.duration * 0.95; // Slightly faster animation than song duration for better sync
+        const heightScale = 100; // Same scale factor as in parseMidiFile
         
         // Start animation of falling notes
         notes.forEach(({element, note}) => {
-            // Set transition for smooth animation with updated timing
-            element.style.transition = `bottom ${fallDuration}s linear`;
+            // Set transition for faster animation - adjusted to match actual play time
+            const animationDuration = note.time;
+            element.style.transition = `bottom ${animationDuration}s linear`;
             // Animate to final position - delayed by a small amount to ensure the transition applies
             setTimeout(() => {
                 element.style.bottom = '0px';
@@ -190,9 +190,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Reset note positions
-        notes.forEach(({element}) => {
+        notes.forEach(({element, note}) => {
             const time = parseFloat(element.dataset.time);
-            const heightScale = 200; // Updated to match the new scale factor
+            const heightScale = 100;
             element.style.transition = 'none'; // Disable transition for immediate positioning
             element.style.bottom = `${notesContainer.clientHeight + (time * heightScale)}px`;
         });

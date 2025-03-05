@@ -140,7 +140,6 @@ button:disabled {
     border-radius: 2px;
     transition: background-color 0.2s;
     opacity: 0.8;
-    will-change: transform, bottom;
 }
 
 .note.active {
