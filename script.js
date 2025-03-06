@@ -271,23 +271,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function generateAiSuggestions(capturedNotes) {
         try {
-            // Prepare music data for LLM analysis
+            // Prepare music data for LLM analysis with more musical context
             const musicData = capturedNotes.map(note => ({
                 noteName: note.name,
                 midiNumber: note.midi,
-                startTime: note.time,
-                duration: note.duration,
+                startTime: note.time.toFixed(3),  // More precise timing
+                duration: note.duration.toFixed(3),
                 velocity: note.velocity
             }));
 
-            // LLM prompt to analyze music and suggest additions
+            // Calculate some basic musical metrics to help the LLM understand the piece
+            const tempoEstimate = estimateTempo(capturedNotes);
+            const keySignature = estimateKeySignature(capturedNotes);
+            const totalDuration = Math.max(...capturedNotes.map(note => note.time + note.duration));
+            
+            // Group notes by measures to help the LLM understand the structure
+            const measuresData = groupNotesByMeasures(capturedNotes, tempoEstimate);
+
+            // Enhanced LLM prompt with musical structure information
             const prompt = `
-As a musical AI, analyze these MIDI notes from the full song:
+As a musical AI composer, analyze these MIDI notes from the full song:
 ${JSON.stringify(musicData, null, 2)}
 
-Based on this melody and harmony pattern, suggest 10-15 additional notes that would complement the piece.
-Focus on creating interesting harmonies, counterpoint, or embellishments that enhance the musical idea.
-The suggestions should match the style and feel of the original piece.
+Musical Analysis:
+- Estimated tempo: ${tempoEstimate} BPM
+- Estimated key: ${keySignature}
+- Song duration: ${totalDuration.toFixed(2)} seconds
+- Note density: ${(capturedNotes.length / totalDuration).toFixed(2)} notes per second
+
+Based on this melody and harmony pattern, suggest 15-20 additional notes that would complement the piece.
+Focus on creating:
+1. Interesting harmonies that enhance the existing chords
+2. Countermelodies that work well with the main melody
+3. Rhythmic elements that complement the existing rhythm
+4. Musical embellishments like trills, grace notes, or arpeggios where appropriate
+
+Your additions should respect the musical style, harmony, and feel of the original piece.
+The notes should be precisely timed to fit with the original composition.
 
 Respond directly with JSON in this format:
 {
@@ -297,11 +317,12 @@ Respond directly with JSON in this format:
       "midiNumber": 60,
       "startTime": 2.5,
       "duration": 0.25,
-      "velocity": 0.75
+      "velocity": 0.75,
+      "purpose": "harmony" // can be: harmony, countermelody, bass, embellishment, etc.
     }
     // more suggested notes
   ],
-  "explanation": "Brief explanation of your musical choices"
+  "musicalChoices": "Detailed explanation of your musical choices, including harmonic analysis and how your additions enhance the piece"
 }`;
 
             // Call the LLM for analysis
@@ -323,17 +344,18 @@ Respond directly with JSON in this format:
             aiSuggestions = result.suggestedNotes.map(note => ({
                 midi: note.midiNumber,
                 name: note.noteName,
-                time: note.startTime,
-                duration: note.duration,
+                time: parseFloat(note.startTime),
+                duration: parseFloat(note.duration),
                 velocity: note.velocity,
+                purpose: note.purpose || "addition",
                 isAiGenerated: true
             }));
 
             console.log("Processed AI suggestions:", aiSuggestions);
             
             // Display AI explanation
-            if (result.explanation) {
-                statusMessage.textContent = "AI Explanation: " + result.explanation;
+            if (result.musicalChoices) {
+                statusMessage.textContent = "AI Analysis: " + result.musicalChoices.substring(0, 200) + "...";
             }
 
         } catch (error) {
@@ -341,6 +363,172 @@ Respond directly with JSON in this format:
             statusMessage.textContent = 'Error generating AI suggestions.';
             aiSuggestions = [];
         }
+    }
+
+    // Helper function to estimate tempo from note patterns
+    function estimateTempo(notes) {
+        if (notes.length < 2) return 120; // Default tempo
+        
+        // Find sequences of consecutive notes
+        const intervals = [];
+        for (let i = 1; i < notes.length; i++) {
+            const interval = notes[i].time - notes[i-1].time;
+            if (interval > 0 && interval < 2) { // Consider reasonable intervals
+                intervals.push(interval);
+            }
+        }
+        
+        if (intervals.length === 0) return 120;
+        
+        // Find the most common interval (mode)
+        const counts = {};
+        intervals.forEach(i => {
+            const rounded = Math.round(i * 100) / 100; // Round to nearest 0.01
+            counts[rounded] = (counts[rounded] || 0) + 1;
+        });
+        
+        let mostCommon = 0.5; // Default
+        let maxCount = 0;
+        
+        for (const interval in counts) {
+            if (counts[interval] > maxCount) {
+                maxCount = counts[interval];
+                mostCommon = parseFloat(interval);
+            }
+        }
+        
+        // Convert to BPM (assuming common interval is a quarter note)
+        return Math.round(60 / mostCommon);
+    }
+
+    // Helper function to estimate key signature
+    function estimateKeySignature(notes) {
+        if (notes.length === 0) return "C major";
+        
+        // Count occurrences of each pitch class
+        const pitchClasses = Array(12).fill(0);
+        notes.forEach(note => {
+            const pitchClass = note.midi % 12;
+            pitchClasses[pitchClass] += note.duration; // Weight by duration
+        });
+        
+        // Major key profiles (based on Krumhansl-Kessler profiles)
+        const majorProfiles = [
+            [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88], // C
+            [2.88, 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29], // C#
+            [2.29, 2.88, 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66], // D
+            [3.66, 2.29, 2.88, 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39], // D#
+            [2.39, 3.66, 2.29, 2.88, 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19], // E
+            [5.19, 2.39, 3.66, 2.29, 2.88, 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52], // F
+            [2.52, 5.19, 2.39, 3.66, 2.29, 2.88, 6.35, 2.23, 3.48, 2.33, 4.38, 4.09], // F#
+            [4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88, 6.35, 2.23, 3.48, 2.33, 4.38], // G
+            [4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88, 6.35, 2.23, 3.48, 2.33], // G#
+            [2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88, 6.35, 2.23, 3.48], // A
+            [3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88, 6.35, 2.23], // A#
+            [2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88, 6.35]  // B
+        ];
+        
+        // Minor key profiles
+        const minorProfiles = [
+            [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17], // C
+            [3.17, 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34], // C#
+            [3.34, 3.17, 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69], // D
+            [2.69, 3.34, 3.17, 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98], // D#
+            [3.98, 2.69, 3.34, 3.17, 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75], // E
+            [4.75, 3.98, 2.69, 3.34, 3.17, 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54], // F
+            [2.54, 4.75, 3.98, 2.69, 3.34, 3.17, 6.33, 2.68, 3.52, 5.38, 2.60, 3.53], // F#
+            [3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17, 6.33, 2.68, 3.52, 5.38, 2.60], // G
+            [2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17, 6.33, 2.68, 3.52, 5.38], // G#
+            [5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17, 6.33, 2.68, 3.52], // A
+            [3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17, 6.33, 2.68], // A#
+            [2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17, 6.33]  // B
+        ];
+        
+        // Calculate correlation with each profile
+        let bestCorrelation = -1;
+        let bestKey = 0;
+        let isMajor = true;
+        
+        // Check major keys
+        for (let i = 0; i < 12; i++) {
+            const correlation = calculateCorrelation(pitchClasses, majorProfiles[i]);
+            if (correlation > bestCorrelation) {
+                bestCorrelation = correlation;
+                bestKey = i;
+                isMajor = true;
+            }
+        }
+        
+        // Check minor keys
+        for (let i = 0; i < 12; i++) {
+            const correlation = calculateCorrelation(pitchClasses, minorProfiles[i]);
+            if (correlation > bestCorrelation) {
+                bestCorrelation = correlation;
+                bestKey = i;
+                isMajor = false;
+            }
+        }
+        
+        // Convert to key name
+        const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        return `${keyNames[bestKey]} ${isMajor ? 'major' : 'minor'}`;
+    }
+    
+    // Helper function to calculate correlation between two arrays
+    function calculateCorrelation(array1, array2) {
+        if (array1.length !== array2.length) return 0;
+        
+        let sum1 = 0, sum2 = 0, sum1Sq = 0, sum2Sq = 0, pSum = 0;
+        const n = array1.length;
+        
+        for (let i = 0; i < n; i++) {
+            sum1 += array1[i];
+            sum2 += array2[i];
+            sum1Sq += array1[i] ** 2;
+            sum2Sq += array2[i] ** 2;
+            pSum += array1[i] * array2[i];
+        }
+        
+        const num = pSum - (sum1 * sum2 / n);
+        const den = Math.sqrt((sum1Sq - sum1 ** 2 / n) * (sum2Sq - sum2 ** 2 / n));
+        
+        return den === 0 ? 0 : num / den;
+    }
+    
+    // Helper function to group notes by measures for better analysis
+    function groupNotesByMeasures(notes, tempo) {
+        if (notes.length === 0) return [];
+        
+        // Estimate beats per measure (assuming 4/4 time signature)
+        const beatsPerMeasure = 4;
+        const secondsPerBeat = 60 / tempo;
+        const secondsPerMeasure = secondsPerBeat * beatsPerMeasure;
+        
+        // Group notes by measure
+        const measures = [];
+        let measureEnd = secondsPerMeasure;
+        let currentMeasure = [];
+        
+        // Sort notes by time
+        const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
+        
+        for (const note of sortedNotes) {
+            while (note.time >= measureEnd) {
+                if (currentMeasure.length > 0) {
+                    measures.push(currentMeasure);
+                    currentMeasure = [];
+                }
+                measureEnd += secondsPerMeasure;
+            }
+            currentMeasure.push(note);
+        }
+        
+        // Add the last measure if it has notes
+        if (currentMeasure.length > 0) {
+            measures.push(currentMeasure);
+        }
+        
+        return measures;
     }
 
     function initPiano() {
