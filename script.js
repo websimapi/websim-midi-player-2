@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const pianoContainer = document.getElementById('piano-container');
     const notesContainer = document.getElementById('notes-container');
     const statusMessage = document.getElementById('status-message');
-    const aiToggle = document.getElementById('ai-toggle');
     const analysisDuration = document.getElementById('analysis-duration');
 
     // State variables
@@ -21,9 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let startOffset = 0;
     let aiSuggestions = [];
     let originalMidiData = [];
-    let isCapturing = false;
-    let captureStartTime = 0;
-    let isAiMode = false;
+    let isAiAnalysisDone = false;
     let scheduledEvents = [];
 
     // Initialize the piano keyboard (88 keys)
@@ -42,9 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     stopButton.addEventListener('click', stopMidi);
     restartButton.addEventListener('click', restartMidi);
-    aiToggle.addEventListener('change', (e) => {
-        isAiMode = e.target.checked;
-    });
 
     // Initialize Tone.js synth
     synth = new Tone.PolySynth(Tone.Synth).toDestination();
@@ -72,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Clear previous notes
         originalMidiData = [];
         aiSuggestions = [];
+        isAiAnalysisDone = false;
 
         // Process each track to extract note data
         midiFile.tracks.forEach((track, trackIndex) => {
@@ -90,20 +85,27 @@ document.addEventListener('DOMContentLoaded', () => {
         // Sort notes by time
         originalMidiData.sort((a, b) => a.time - b.time);
 
-        // Enable play button and restart button
-        playButton.disabled = false;
-        restartButton.disabled = false;
-
-        // Disable the stop button until playing
+        // Disable play button until AI analysis is complete
+        playButton.disabled = true;
+        restartButton.disabled = true;
         stopButton.disabled = true;
 
-        // Reset status message
-        statusMessage.textContent = '';
+        // Show status message
+        statusMessage.textContent = 'AI is analyzing the full song...';
         
         // Reset playback state
         isPaused = false;
         pausedTime = 0;
         startOffset = 0;
+        
+        // Automatically start AI analysis for the full song
+        generateAiSuggestions(originalMidiData).then(() => {
+            // Enable buttons after analysis is complete
+            playButton.disabled = false;
+            restartButton.disabled = false;
+            statusMessage.textContent = 'Analysis complete. Press Play to hear the song with AI additions.';
+            isAiAnalysisDone = true;
+        });
     }
 
     async function playMidi() {
@@ -111,6 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (isPaused) {
             resumeMidi();
+            return;
+        }
+
+        // Wait for AI analysis to complete if it hasn't
+        if (!isAiAnalysisDone) {
+            statusMessage.textContent = 'Please wait for AI analysis to complete...';
             return;
         }
 
@@ -123,28 +131,13 @@ document.addEventListener('DOMContentLoaded', () => {
         playButton.textContent = 'Pause';
         stopButton.disabled = false;
 
-        // If in AI mode and we have suggestions, play with AI additions
-        const notesToPlay = isAiMode && aiSuggestions.length > 0 
-            ? [...originalMidiData, ...aiSuggestions].sort((a, b) => a.time - b.time)
-            : originalMidiData;
+        // Always combine original notes with AI suggestions
+        const notesToPlay = [...originalMidiData, ...aiSuggestions].sort((a, b) => a.time - b.time);
 
         // Clear any active keys (visual cleanup)
         document.querySelectorAll('.piano-key.active, .piano-key.ai-active').forEach(el => {
             el.classList.remove('active', 'ai-active');
         });
-
-        // Get the selected analysis duration
-        const analysisOption = analysisDuration.value;
-        const analysisDurationInSeconds = analysisOption === 'full' 
-            ? Math.max(...originalMidiData.map(note => note.time + note.duration))
-            : parseInt(analysisOption);
-
-        // If we're not in AI mode and we don't have AI suggestions yet, capture for LLM analysis
-        if (!isAiMode && aiSuggestions.length === 0) {
-            isCapturing = true;
-            captureStartTime = Tone.now();
-            statusMessage.textContent = `Capturing ${analysisOption === 'full' ? 'full song' : analysisOption + ' seconds'} for AI analysis...`;
-        }
 
         // Schedule all notes
         const now = Tone.now();
@@ -186,30 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }, now + adjustedTime + note.duration);
             scheduledEvents.push(noteOffEvent);
         });
-
-        // If capturing, schedule the LLM analysis
-        if (isCapturing) {
-            const captureEvent = Tone.Transport.schedule(async () => {
-                // Get the notes in the analysis window
-                const capturedData = analysisOption === 'full'
-                    ? originalMidiData
-                    : originalMidiData.filter(note => note.time < analysisDurationInSeconds);
-                
-                isCapturing = false;
-
-                // Show analyzing message
-                statusMessage.textContent = 'AI is analyzing your music...';
-
-                // Request AI suggestions
-                await generateAiSuggestions(capturedData);
-
-                // Update status once we have suggestions
-                statusMessage.textContent = 'AI suggestions ready! Toggle "AI Mode" to hear them.';
-            }, now + (analysisOption === 'full' 
-                ? Math.max(...originalMidiData.map(note => note.time + note.duration))
-                : analysisDurationInSeconds));
-            scheduledEvents.push(captureEvent);
-        }
 
         // Schedule stop at the end
         const totalDuration = Math.max(...notesToPlay.map(note => note.time + note.duration));
@@ -313,10 +282,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // LLM prompt to analyze music and suggest additions
             const prompt = `
-As a musical AI, analyze these MIDI notes from ${analysisDuration.value === 'full' ? 'the full song' : 'the first ' + analysisDuration.value + ' seconds of a piece'}:
+As a musical AI, analyze these MIDI notes from the full song:
 ${JSON.stringify(musicData, null, 2)}
 
-Based on this melody and harmony pattern, suggest 5-10 additional notes that would complement the piece.
+Based on this melody and harmony pattern, suggest 10-15 additional notes that would complement the piece.
 Focus on creating interesting harmonies, counterpoint, or embellishments that enhance the musical idea.
 The suggestions should match the style and feel of the original piece.
 
@@ -361,6 +330,11 @@ Respond directly with JSON in this format:
             }));
 
             console.log("Processed AI suggestions:", aiSuggestions);
+            
+            // Display AI explanation
+            if (result.explanation) {
+                statusMessage.textContent = "AI Explanation: " + result.explanation;
+            }
 
         } catch (error) {
             console.error("Error generating AI suggestions:", error);
