@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset Tone.js context if it's suspended
         if (Tone.context.state !== 'running') {
-            await Tone.context.resume();
+            Tone.context.resume();
         }
 
         isPlaying = true;
@@ -125,11 +125,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // If in AI mode and we have suggestions, play with AI additions
         const notesToPlay = isAiMode && aiSuggestions.length > 0 
-            ? [...originalMidiData, ...aiSuggestions] 
+            ? [...originalMidiData, ...aiSuggestions].sort((a, b) => a.time - b.time)
             : originalMidiData;
 
-        // Sort combined notes by time
-        notesToPlay.sort((a, b) => a.time - b.time);
+        // Clear any active keys (visual cleanup)
+        document.querySelectorAll('.piano-key.active, .piano-key.ai-active').forEach(el => {
+            el.classList.remove('active', 'ai-active');
+        });
 
         // Get the selected analysis duration
         const analysisOption = analysisDuration.value;
@@ -292,7 +294,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function restartMidi() {
         stopMidi(true); // Stop and reset position
-        playMidi(); // Start from the beginning
+        // Small delay to ensure everything is reset before starting
+        setTimeout(() => {
+            playMidi(); // Start from the beginning
+        }, 100);
     }
 
     async function generateAiSuggestions(capturedNotes) {
