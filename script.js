@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let originalMidiData = [];
     let isAiAnalysisDone = false;
     let scheduledEvents = [];
+    let segmentAnalysisProgress = 0; // Track analysis progress
+    let totalSegments = 0; // Total number of segments to analyze
 
     // Initialize the piano keyboard (88 keys)
     initPiano();
@@ -91,21 +93,189 @@ document.addEventListener('DOMContentLoaded', () => {
         stopButton.disabled = true;
 
         // Show status message
-        statusMessage.textContent = 'AI is analyzing the full song...';
+        statusMessage.textContent = 'AI is analyzing the song in 5-second segments...';
         
         // Reset playback state
         isPaused = false;
         pausedTime = 0;
         startOffset = 0;
         
-        // Automatically start AI analysis for the full song
-        generateAiSuggestions(originalMidiData).then(() => {
-            // Enable buttons after analysis is complete
-            playButton.disabled = false;
-            restartButton.disabled = false;
-            statusMessage.textContent = 'Analysis complete. Press Play to hear the song with AI additions.';
-            isAiAnalysisDone = true;
-        });
+        // Analyze the song in 5-second segments
+        const totalDuration = Math.max(...originalMidiData.map(note => note.time + note.duration));
+        const segmentSize = 5; // 5 seconds per segment
+        totalSegments = Math.ceil(totalDuration / segmentSize);
+        segmentAnalysisProgress = 0;
+        aiSuggestions = [];
+        
+        analyzeSegments(originalMidiData, segmentSize, totalDuration)
+            .then(() => {
+                // Enable buttons after analysis is complete
+                playButton.disabled = false;
+                restartButton.disabled = false;
+                statusMessage.textContent = 'Analysis complete. Press Play to hear the song with AI additions.';
+                isAiAnalysisDone = true;
+            });
+    }
+
+    async function analyzeSegments(allNotes, segmentSize, totalDuration) {
+        // Create array of segments
+        const segments = [];
+        for (let start = 0; start < totalDuration; start += segmentSize) {
+            const end = start + segmentSize;
+            // Get notes that start in this segment
+            const notesInSegment = allNotes.filter(note => 
+                note.time >= start && note.time < end
+            );
+            segments.push({
+                start,
+                end,
+                notes: notesInSegment
+            });
+        }
+        
+        // Analyze each segment sequentially
+        for (let i = 0; i < segments.length; i++) {
+            const segment = segments[i];
+            statusMessage.textContent = `Analyzing segment ${i+1}/${segments.length} (${Math.round(segment.start)}-${Math.round(segment.end)} seconds)...`;
+            
+            // Only analyze segments that have notes
+            if (segment.notes.length > 0) {
+                // Get context from nearby segments for better musical continuity
+                const contextStart = Math.max(0, segment.start - segmentSize);
+                const contextEnd = Math.min(totalDuration, segment.end + segmentSize);
+                
+                const contextNotes = allNotes.filter(note => 
+                    note.time >= contextStart && note.time < contextEnd
+                );
+                
+                // Generate AI suggestions for this segment
+                const segmentSuggestions = await generateAiSuggestionsForSegment(
+                    contextNotes, 
+                    segment.start, 
+                    segment.end
+                );
+                
+                // Add to overall suggestions
+                aiSuggestions.push(...segmentSuggestions);
+            }
+            
+            segmentAnalysisProgress++;
+        }
+        
+        // Sort all suggestions by time
+        aiSuggestions.sort((a, b) => a.time - b.time);
+        console.log("Complete AI suggestions across all segments:", aiSuggestions);
+    }
+
+    async function generateAiSuggestionsForSegment(notes, segmentStart, segmentEnd) {
+        try {
+            // Prepare music data for LLM analysis with more musical context
+            const musicData = notes.map(note => ({
+                noteName: note.name,
+                midiNumber: note.midi,
+                startTime: note.time.toFixed(3),  // More precise timing
+                duration: note.duration.toFixed(3),
+                velocity: note.velocity,
+                // Mark if the note is part of the core segment or context
+                inSegment: note.time >= segmentStart && note.time < segmentEnd
+            }));
+
+            // Calculate some basic musical metrics to help the LLM understand the piece
+            const tempoEstimate = estimateTempo(notes);
+            const keySignature = estimateKeySignature(notes);
+            const segmentDuration = segmentEnd - segmentStart;
+            
+            // Group notes by measures to help the LLM understand the structure
+            const measuresData = groupNotesByMeasures(notes, tempoEstimate);
+
+            // Enhanced LLM prompt with musical structure information
+            const prompt = `
+As a musical AI composer, analyze these MIDI notes from a ${segmentDuration}-second segment (${segmentStart.toFixed(1)}-${segmentEnd.toFixed(1)} seconds) of the song:
+${JSON.stringify(musicData, null, 2)}
+
+Musical Analysis:
+- Estimated tempo: ${tempoEstimate} BPM
+- Estimated key: ${keySignature}
+- Segment duration: ${segmentDuration.toFixed(2)} seconds
+- Note density: ${(notes.length / segmentDuration).toFixed(2)} notes per second
+
+Based on this melody and harmony pattern, suggest 5-8 additional notes that would complement this specific segment.
+Focus on creating:
+1. Interesting harmonies that enhance the existing chords
+2. Countermelodies that work well with the main melody
+3. Rhythmic elements that complement the existing rhythm
+4. Musical embellishments like trills, grace notes, or arpeggios where appropriate
+
+IMPORTANT: Your suggested notes MUST be within this specific time window: ${segmentStart.toFixed(2)}-${segmentEnd.toFixed(2)} seconds.
+Make sure each suggested startTime is >= ${segmentStart.toFixed(2)} and < ${segmentEnd.toFixed(2)}.
+
+Your additions should respect the musical style, harmony, and feel of the original piece.
+The notes should be precisely timed to fit with the original composition.
+
+Respond directly with JSON in this format:
+{
+  "suggestedNotes": [
+    {
+      "noteName": "C4",
+      "midiNumber": 60,
+      "startTime": 2.5,
+      "duration": 0.25,
+      "velocity": 0.75,
+      "purpose": "harmony" // can be: harmony, countermelody, bass, embellishment, etc.
+    }
+    // more suggested notes
+  ],
+  "musicalChoices": "Brief explanation of your musical choices for this segment"
+}`;
+
+            // Call the LLM for analysis
+            const completion = await websim.chat.completions.create({
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                json: true
+            });
+
+            // Parse the LLM response
+            const result = JSON.parse(completion.content);
+            console.log(`AI suggestions for segment ${segmentStart}-${segmentEnd}:`, result);
+
+            // Format the suggestions for our player
+            const segmentSuggestions = result.suggestedNotes.map(note => {
+                // Ensure start time is within segment bounds
+                const time = Math.max(segmentStart, Math.min(segmentEnd - 0.01, parseFloat(note.startTime)));
+                
+                return {
+                    midi: note.midiNumber,
+                    name: note.noteName,
+                    time: time,
+                    duration: parseFloat(note.duration),
+                    velocity: note.velocity,
+                    purpose: note.purpose || "addition",
+                    isAiGenerated: true,
+                    segment: `${segmentStart}-${segmentEnd}`
+                };
+            });
+            
+            // Filter out any invalid suggestions
+            return segmentSuggestions.filter(note => 
+                !isNaN(note.time) && !isNaN(note.duration) && note.time >= segmentStart && note.time < segmentEnd
+            );
+
+        } catch (error) {
+            console.error(`Error generating AI suggestions for segment ${segmentStart}-${segmentEnd}:`, error);
+            return [];
+        }
+    }
+
+    async function generateAiSuggestions(capturedNotes) {
+        // This function is kept for backward compatibility but now just calls the segment analysis
+        const totalDuration = Math.max(...capturedNotes.map(note => note.time + note.duration));
+        const segmentSize = 5; // 5 seconds per segment
+        return analyzeSegments(capturedNotes, segmentSize, totalDuration);
     }
 
     async function playMidi() {
@@ -267,102 +437,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             playMidi(); // Start from the beginning
         }, 100);
-    }
-
-    async function generateAiSuggestions(capturedNotes) {
-        try {
-            // Prepare music data for LLM analysis with more musical context
-            const musicData = capturedNotes.map(note => ({
-                noteName: note.name,
-                midiNumber: note.midi,
-                startTime: note.time.toFixed(3),  // More precise timing
-                duration: note.duration.toFixed(3),
-                velocity: note.velocity
-            }));
-
-            // Calculate some basic musical metrics to help the LLM understand the piece
-            const tempoEstimate = estimateTempo(capturedNotes);
-            const keySignature = estimateKeySignature(capturedNotes);
-            const totalDuration = Math.max(...capturedNotes.map(note => note.time + note.duration));
-            
-            // Group notes by measures to help the LLM understand the structure
-            const measuresData = groupNotesByMeasures(capturedNotes, tempoEstimate);
-
-            // Enhanced LLM prompt with musical structure information
-            const prompt = `
-As a musical AI composer, analyze these MIDI notes from the full song:
-${JSON.stringify(musicData, null, 2)}
-
-Musical Analysis:
-- Estimated tempo: ${tempoEstimate} BPM
-- Estimated key: ${keySignature}
-- Song duration: ${totalDuration.toFixed(2)} seconds
-- Note density: ${(capturedNotes.length / totalDuration).toFixed(2)} notes per second
-
-Based on this melody and harmony pattern, suggest 15-20 additional notes that would complement the piece.
-Focus on creating:
-1. Interesting harmonies that enhance the existing chords
-2. Countermelodies that work well with the main melody
-3. Rhythmic elements that complement the existing rhythm
-4. Musical embellishments like trills, grace notes, or arpeggios where appropriate
-
-Your additions should respect the musical style, harmony, and feel of the original piece.
-The notes should be precisely timed to fit with the original composition.
-
-Respond directly with JSON in this format:
-{
-  "suggestedNotes": [
-    {
-      "noteName": "C4",
-      "midiNumber": 60,
-      "startTime": 2.5,
-      "duration": 0.25,
-      "velocity": 0.75,
-      "purpose": "harmony" // can be: harmony, countermelody, bass, embellishment, etc.
-    }
-    // more suggested notes
-  ],
-  "musicalChoices": "Detailed explanation of your musical choices, including harmonic analysis and how your additions enhance the piece"
-}`;
-
-            // Call the LLM for analysis
-            const completion = await websim.chat.completions.create({
-                messages: [
-                    {
-                        role: "user",
-                        content: prompt
-                    }
-                ],
-                json: true
-            });
-
-            // Parse the LLM response
-            const result = JSON.parse(completion.content);
-            console.log("AI suggestions:", result);
-
-            // Format the suggestions for our player
-            aiSuggestions = result.suggestedNotes.map(note => ({
-                midi: note.midiNumber,
-                name: note.noteName,
-                time: parseFloat(note.startTime),
-                duration: parseFloat(note.duration),
-                velocity: note.velocity,
-                purpose: note.purpose || "addition",
-                isAiGenerated: true
-            }));
-
-            console.log("Processed AI suggestions:", aiSuggestions);
-            
-            // Display AI explanation
-            if (result.musicalChoices) {
-                statusMessage.textContent = "AI Analysis: " + result.musicalChoices.substring(0, 200) + "...";
-            }
-
-        } catch (error) {
-            console.error("Error generating AI suggestions:", error);
-            statusMessage.textContent = 'Error generating AI suggestions.';
-            aiSuggestions = [];
-        }
     }
 
     // Helper function to estimate tempo from note patterns
